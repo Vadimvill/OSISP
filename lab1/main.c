@@ -1,3 +1,4 @@
+
 #include <stdio.h>
 #include <dirent.h>
 #include <string.h>
@@ -14,47 +15,25 @@ struct options processData(char*argv[],int argc){
     struct options option;
     option.s = 0;
     option.f = 0;
-    option.startOfPath = 1;
+    option.startOfPath = -1;
     option.d = 0;
     option.l = 0;
-    int b = 1;
-    int maxLength = 4;
-    int cheakPath = 0;
+
     for(int i = 1;i<argc;i++){
-        if(argv[i][0] != '-') cheakPath = 1;
-    }
-    if(cheakPath != 1){
-        option.startOfPath = -1;
-    }
-    if(argc == 2 && cheakPath == 1){
-        option.s = 0;
-        option.f = 1;
-        option.d = 1;
-        option.l = 1;
-        return option;
-    }
-    if(argv[1][0] != '-' && cheakPath == 1){
-        b = 2;
-        maxLength = argc;
-    }
-    if(cheakPath == 0){
-        maxLength = argc;
-    }
-    for(;b<maxLength;b++){
-    if(argv[b][0] == '-'){
-        for(int i = 1;i<4;i++){
-            if(argv[b][i] == ' '){
-                break;
+        if(argv[i][0] == '-'){
+            for(int b= 0;b<4;b++){
+                if(argv[i][b] == ' '){
+                    break;
+                }
+                if(argv[i][b] == 'f')  option.f = 1;
+                if(argv[i][b] == 'd')  option.d = 1;
+                if(argv[i][b] == 'l')  option.l = 1;
+                if(argv[i][b] == 's')  option.s = 1;
             }
-            if(argv[b][i] == 'f')  option.f = 1;
-            if(argv[b][i] == 'd')  option.d = 1;
-            if(argv[b][i] == 'l')  option.l = 1;
-            if(argv[b][i] == 's')  option.s = 1;
+        } else{
+            option.startOfPath = i;
+            break;
         }
-      } else{
-        option.startOfPath = b;
-        break;
-    }
     }
     return option;
 }
@@ -68,6 +47,11 @@ int main(int argc, char *argv[]) {
         path = "./";
     }
     else{path = argv[option.startOfPath];}
+    if(!option.d && !option.l && !option.f){
+        option.f =1;
+        option.l =1;
+        option.d = 1;
+    }
     struct dirent **namelist;
     int n;
     if(option.s == 0){
