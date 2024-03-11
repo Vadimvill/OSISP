@@ -1,16 +1,23 @@
 CC = gcc
-CFLAGS = -std=c11 -pedantic -W -Wall -Wextra -Werror
+CFLAGS_RELEASE = -std=c11 -pedantic -W -Wall -Wextra -Werror
+CFLAGS_DEBUG = -g -ggdb -std=c11 -pedantic -W -Wall -Wextra
 
-TARGET = dirwalk
+.PHONY: all clean
+
+MODE = release
+
+ifeq ($(MODE), release)
+	CFLAGS = $(CFLAGS_RELEASE)
+	TARGET = dirwalk
+else
+	CFLAGS = $(CFLAGS_DEBUG)
+	TARGET = dirwalk_debug
+endif
 
 all: $(TARGET)
 
-$(TARGET): main.c
-	$(CC) $(CFLAGS) $< -o $@
-
-debug: $(TARGET))
-	gdb ./$(TARGET)
+$(TARGET): src/main.c
+	$(CC) $(CFLAGS) $^ -o $@
 
 clean:
-	rm -f $(TARGET)
-
+	rm -f dirwalk dirwalk_debug
