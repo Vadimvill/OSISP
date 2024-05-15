@@ -1,57 +1,70 @@
-#include "func.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <fcntl.h>
+#include <sys/mman.h>
+#include <unistd.h>
+#include <semaphore.h>
+#include <errno.h>
+#include <signal.h>
+#include <sys/wait.h>
+#include "ring.h"
+#include "fill_extract.h"
+#include "stack.h"
+
 
 int continuing = 1;
 
-StackNode* stackFiller = NULL;             // Процессы добавления.
-StackNode* stackExtractor = NULL;          // Процессы удаления.
+StackNode* stackFiller = NULL;
+StackNode* stackExtractor = NULL;
 extern int ftruncate(int __fd, __off_t __length);
 extern int kill(__pid_t __pid, int __sig);
-int main() {
+int main(void) {
     srand(time(NULL));
+    sem_t *fill_sem;
+    sem_t *extract_sem;
+    sem_t *queue_sem;
 
-    // Удаление, если созданы, семафоров и совместной памяти.
-    shm_unlink(SHARED_MEMORY_NAME);
-    sem_unlink(FILL_SEM_NAME);
-    sem_unlink(EXTRACT_SEM_NAME);
-    sem_unlink(QUEUE_ACCESS_SEM_NAME);
+    shm_unlink(SHARED_MEMORY);
+    sem_unlink(FILL_SEM);
+    sem_unlink(EXTRACT_SEM);
+    sem_unlink(QUEUE_ACCESS_SEM);
 
-    // Сигнал отмены работы.
-    signal(SIGUSR1, changeContinuingStatus);
 
-    // Открыть совместо используемую память для чтения и записи всем.
-    int shmFd = shm_open(SHARED_MEMORY_NAME, O_CREAT | O_RDWR, 0666);
-    if(shmFd == -1) {
-        printf("Error while creating shared memory.\n");
+    int shmFd = shm_open(SHARED_MEMORY,O_CREAT | O_RDWR,0666);
+    if (shmFd == -1) {
+        perror("shm_open");
         exit(EXIT_FAILURE);
     }
-    // Выделить место под заданное количество элементов очереди.
-    ftruncate(shmFd, sizeof(Queue) + MAX_MESSAGE_COUNT * sizeof(Node) + MAX_MESSAGE_COUNT * sizeof(Message));
-    // Получение образа памяти.
-    Queue* queue = mmap(NULL, sizeof(Queue) + MAX_MESSAGE_COUNT * sizeof(Node) + MAX_MESSAGE_COUNT * sizeof(Message), PROT_READ | PROT_WRITE, MAP_SHARED, shmFd, 0);
-    if(queue == MAP_FAILED) {
-        printf("Error while mapping shared data.\n");
+    if (ftruncate(shmFd, sizeof (Queue)+sizeof(Message)*MESSAGE_COUNT+sizeof (Node)*MESSAGE_COUNT) == -1) {
+        perror("ftruncate");
         exit(EXIT_FAILURE);
     }
-    // Значение указателей по умолчанию.
+    Queue * queue = mmap(NULL,sizeof (Queue)+sizeof(Message)*MESSAGE_COUNT+sizeof (Node)*MESSAGE_COUNT,PROT_READ | PROT_WRITE, MAP_SHARED, shmFd, 0);
+    if (queue== MAP_FAILED) {
+        perror("mmap");
+        exit(EXIT_FAILURE);
+    }
+
+
+    signal(SIGUSR1,change_counting);
+
+
     queue->ringHead = 0;
     queue->ringTail = 0;
     queue->countDeleted = 0;
     queue->countAdded = 0;
     queue->currentPlaceToWrite = (uintptr_t)queue + sizeof(Queue);
 
-    // Инициализация семафоров.
-    sem_t* fillSem;
-    if((fillSem = sem_open(FILL_SEM_NAME, O_CREAT | O_EXCL, 0666, 1)) == SEM_FAILED) {
+
+    if((fill_sem= sem_open(FILL_SEM, O_CREAT | O_EXCL, 0666, 1)) == SEM_FAILED) {
         printf("Error while open filling semaphore, code %d.\n", errno);
         exit(errno);
     }
-    sem_t* extractSem;
-    if((extractSem = sem_open(EXTRACT_SEM_NAME, O_CREAT | O_EXCL, 0666, 1)) == SEM_FAILED) {
+    if((extract_sem = sem_open(EXTRACT_SEM, O_CREAT | O_EXCL, 0666, 1)) == SEM_FAILED) {
         printf("Error while open extracting semaphore, code %d.\n", errno);
         exit(errno);
     }
-    sem_t* queueAccess;
-    if((queueAccess = sem_open(QUEUE_ACCESS_SEM_NAME, O_CREAT | O_EXCL, 0666, 1)) == SEM_FAILED) {
+    if((queue_sem = sem_open(QUEUE_ACCESS_SEM, O_CREAT | O_EXCL, 0666, 1)) == SEM_FAILED) {
         printf("Error while open queue semaphore, code %d.\n", errno);
         exit(errno);
     }
@@ -65,7 +78,7 @@ int main() {
                     printf("Error occurred while creating new filler, error code %d.\n", errno);
                     exit(errno);
                 } else if(pid == 0) {
-                    fillMessages();
+                    fill_message();
                     exit(0);
                 } else
                     pushStack(&stackFiller, pid);
@@ -85,7 +98,7 @@ int main() {
                     printf("Error occurred while creating new extractor, error code %d.\n", errno);
                     exit(errno);
                 } else if(pid == 0) {
-                    extractMessages();
+                    extract_message();
                     exit(0);
                 } else
                     pushStack(&stackExtractor, pid);
@@ -115,18 +128,17 @@ int main() {
                 break;
         }
     }
-    // Освобождение памяти.
-    munmap(queue, sizeof(Queue) + MAX_MESSAGE_COUNT * sizeof(Node) + MAX_MESSAGE_COUNT * sizeof(Message));
+
+    munmap(queue,sizeof (Node)*MESSAGE_COUNT+sizeof (Message)*MESSAGE_COUNT + sizeof (Queue));
     close(shmFd);
-    shm_unlink(SHARED_MEMORY_NAME);
+    shm_unlink(QUEUE_ACCESS_SEM);
 
-    // Освобождение семафоров.
-    sem_close(fillSem);
-    sem_unlink(FILL_SEM_NAME);
-    sem_close(extractSem);
-    sem_unlink(EXTRACT_SEM_NAME);
-    sem_close(queueAccess);
-    sem_unlink(QUEUE_ACCESS_SEM_NAME);
-
+    sem_close(fill_sem);
+    sem_unlink(FILL_SEM);
+    sem_close(extract_sem);
+    sem_unlink(EXTRACT_SEM);
+    sem_close(queue_sem);
+    sem_unlink(QUEUE_ACCESS_SEM);
     return 0;
+
 }

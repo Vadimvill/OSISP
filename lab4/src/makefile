@@ -1,9 +1,9 @@
 CC=gcc
-CFLAGS = -W -Wall -Wno-unused-parameter -Wno-unused-variable -pedantic -Werror -ggdb
+CFLAGS = -W -Wall -Wno-unused-parameter -Wno-unused-variable -pedantic -Werror -ggdb -std=c11
 
 all: prog
 
-prog: main.c func.c stack.c ring.c
+prog: main.c fill_extract.c stack.c ring.c
 	$(CC) $(CFLAGS) -o $@ $^
 
 clean:

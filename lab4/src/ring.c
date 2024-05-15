@@ -51,4 +51,6 @@ void printMessage(Message* mes) {
     for(size_t i = 0; i<mes->size; i++)
         printf("%d", mes->data[i]);
     printf("\n");
-}
+}//
+// Created by vadim on 15.5.24.
+//

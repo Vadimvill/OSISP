@@ -12,4 +12,6 @@ void popStack(StackNode** head) {
         *head = (*head)->next;
         free(temp);
     }
-}
+}//
+// Created by vadim on 15.5.24.
+//
